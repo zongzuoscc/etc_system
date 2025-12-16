@@ -16,6 +16,12 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
+  redis:
+    host: localhost
+    port: 6379
+    database: 0
+    timeout: 3000ms
+
   # 【关键修改】mvc 必须提到最外面，和 datasource 同级
   mvc:
     pathmatch:

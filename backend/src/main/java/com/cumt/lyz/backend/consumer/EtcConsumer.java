@@ -12,74 +12,79 @@ import org.springframework.stereotype.Component;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+/**
+ * ETC 数据消费者
+ * 职责：只负责接收 Kafka 的原始数据并存入数据库 (etc_data 表)
+ * 变化：套牌车检测逻辑已剥离给 Spark 引擎处理
+ */
 @Component
 public class EtcConsumer {
 
     @Autowired
     private EtcService etcService;
 
-    // 只需要一个普通的 Gson 实例
+    // ❌ 已移除：private FakeVehicleDetectionService detectionService;
+    // 原因：检测任务已交给 Spark，后端不再重复计算
+
     private final Gson gson = new Gson();
 
-    // 专门处理 Python 发来的 ISO 时间格式 (例如: 2023-12-14T15:30:00)
-    // 注意：SimpleDateFormat 线程不安全，这里简单演示，高并发建议用 LocalTime
     private Date parseTime(String timeStr) {
         try {
             if (timeStr == null) return new Date();
-            // 替换掉 ISO 格式里的 'T'，变成标准 SQL 时间格式
             String cleanTime = timeStr.replace("T", " ");
-            // 截取前19位 (yyyy-MM-dd HH:mm:ss)，去掉可能存在的毫秒
             if (cleanTime.length() > 19) {
                 cleanTime = cleanTime.substring(0, 19);
             }
             return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(cleanTime);
         } catch (Exception e) {
-            return new Date(); // 解析失败就用当前时间
+            return new Date();
         }
     }
 
     @KafkaListener(topics = "etc_traffic", groupId = "etc-backend-group")
     public void consume(String message) {
         try {
-            // 1. 先解析成通用的 JsonObject (字典)
+            // 1. 解析 JSON
             JsonObject json = JsonParser.parseString(message).getAsJsonObject();
-
-            // 2. 手动构建 Java 对象 (手动映射：拼音 -> 英文)
             EtcData data = new EtcData();
 
-            // 行政区划 XZQHMC -> districtName
+            // 2. 基础字段映射
             if (json.has("XZQHMC")) data.setDistrictName(json.get("XZQHMC").getAsString());
-
-            // 卡口名称 KKMC -> bayonetName
             if (json.has("KKMC")) data.setBayonetName(json.get("KKMC").getAsString());
-
-            // 方向类型 FXLX -> directionType
             if (json.has("FXLX")) data.setDirectionType(json.get("FXLX").getAsString());
-
-            // 号牌种类 HPZL -> plateType
             if (json.has("HPZL")) data.setPlateType(json.get("HPZL").getAsString());
-
-            // 车牌号码 HPHM -> plateNumber
             if (json.has("HPHM")) data.setPlateNumber(json.get("HPHM").getAsString());
-
-            // 车辆品牌 CLPPXH -> vehicleModel
             if (json.has("CLPPXH")) data.setVehicleModel(json.get("CLPPXH").getAsString());
 
-            // 过车时间 GCSJ -> passTime (需要特殊处理时间格式)
+            // 时间处理
             if (json.has("GCSJ")) {
                 data.setPassTime(parseTime(json.get("GCSJ").getAsString()));
             } else {
                 data.setPassTime(new Date());
             }
 
-            // 3. 存入数据库 (MyBatis-Plus 会自动生成 ID)
+            // 3. 经纬度映射 (重要！确保前端地图能显示)
+            if (json.has("JINGDU")) {
+                try {
+                    data.setLongitude(json.get("JINGDU").getAsDouble());
+                } catch (Exception e) { /* 忽略格式错误 */ }
+            }
+            if (json.has("WEIDU")) {
+                try {
+                    data.setLatitude(json.get("WEIDU").getAsDouble());
+                } catch (Exception e) { /* 忽略格式错误 */ }
+            }
+
+            // 4. 【逻辑变更】这里不再进行套牌检测
+            // Spark Streaming 会独立监听 "etc_traffic" 主题，
+            // 发现异常后直接写入 "fake_vehicle_alert" 数据库表。
+            // 这样的架构实现了"计算"与"存储"的分离，性能更高。
+
+            // 5. 存入数据库 (只存原始流水)
             etcService.save(data);
 
-            // 调试日志 (可选)
-            // System.out.println("成功入库: " + data.getPlateNumber());
-
         } catch (Exception e) {
-            System.err.println("数据转换异常: " + e.getMessage());
+            System.err.println("数据处理异常: " + e.getMessage());
         }
     }
 }

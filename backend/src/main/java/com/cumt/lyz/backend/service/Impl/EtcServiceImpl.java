@@ -16,34 +16,35 @@ public class EtcServiceImpl extends ServiceImpl<EtcMapper, EtcData> implements E
 
     @Override
     public Page<EtcData> getHistoryList(int page, int size, String plateNumber) {
-        // 1. 构建分页对象
         Page<EtcData> pageParam = new Page<>(page, size);
-
-        // 2. 构建查询条件 (业务逻辑在这里)
         QueryWrapper<EtcData> query = new QueryWrapper<>();
         if (plateNumber != null && !plateNumber.isEmpty()) {
             query.like("plate_number", plateNumber);
         }
-        query.orderByDesc("pass_time"); // 默认按时间倒序
-
-        // 3. 执行查询
+        query.orderByDesc("pass_time");
         return this.page(pageParam, query);
     }
 
     @Override
     public List<EtcData> getRealTimeTrend() {
-        // 获取最新的 10 条数据用于展示趋势
         Page<EtcData> page = new Page<>(1, 10);
         QueryWrapper<EtcData> query = new QueryWrapper<>();
         query.orderByDesc("pass_time");
-
-        // 只取 records 部分返回
         return this.page(page, query).getRecords();
     }
 
     @Override
     public List<Map<String, Object>> getDistrictStats() {
-        // 直接调用 Mapper 的自定义 SQL
+        // 调用 Mapper 中手写的 SQL
         return baseMapper.countByDistrict();
+    }
+
+    @Override
+    public EtcData getLastRecord(String plateNumber) {
+        QueryWrapper<EtcData> query = new QueryWrapper<>();
+        query.eq("plate_number", plateNumber)
+                .orderByDesc("pass_time")
+                .last("LIMIT 1");
+        return this.getOne(query);
     }
 }

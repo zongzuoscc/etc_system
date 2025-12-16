@@ -21,29 +21,25 @@ public class EtcData implements Serializable {
 
     /**
      * 主键 ID (对应 CSV: GCXH)
-     * 注意：使用 MyCat 时，ID通常由雪花算法生成，这里为了模拟简单，在Service层手动生成或由MP生成
+     * 注意：使用 MyCat 时，ID通常由雪花算法生成，
      */
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
-
     /**
      * 行政区划 (对应 CSV: XZQHMC)
      * 自动映射数据库字段: district_name
      */
     private String districtName;
-
     /**
      * 卡口名称 (对应 CSV: KKMC)
      * 自动映射数据库字段: bayonet_name
      */
     private String bayonetName;
-
     /**
      * 方向类型 (对应 CSV: FXLX)
      * 自动映射数据库字段: direction_type
      */
     private String directionType;
-
     /**
      * 过车时间 (对应 CSV: GCSJ)
      * 自动映射数据库字段: pass_time
@@ -51,19 +47,16 @@ public class EtcData implements Serializable {
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date passTime;
-
     /**
      * 号牌种类 (对应 CSV: HPZL)
      * 自动映射数据库字段: plate_type
      */
     private String plateType;
-
     /**
      * 车牌号 (对应 CSV: HPHM)
      * 自动映射数据库字段: plate_number
      */
     private String plateNumber;
-
     /**
      * 车辆品牌型号 (对应 CSV: CLPPXH)
      * 自动映射数据库字段: vehicle_model
