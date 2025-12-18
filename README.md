@@ -42,7 +42,7 @@ docker中确保容器全部启动。创建容器的配置文件也增加了进�
 
 如何运行该项目，首先在前端所在的文件夹打开cmd命令框，输入npm run dev
 
-在docker中将需要的容器全部启动
+在docker中将需要的容器全部启动，同时启动mycat服务，mycat的启动方法同样是通过命令行，在mycat的bin目录下打开cmd输入mycat console即可启动。（记得一定要先把conf目录下的三个配置文件进行替换）
 
 使用Intellij IDEA打开backend文件夹，之后打开mycat，mysql的两个节点，确保建好了库和表
 
@@ -103,5 +103,3 @@ create table fake_vehicle_alert
 
 
 然后启动数据生成的代码，接下来应该就可以在前端看到对应的内容了
-
-
