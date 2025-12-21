@@ -68,15 +68,31 @@
         </div>
       </div>
 
-      <!-- 右上：监控区域数 -->
-      <div class="data-card monitor-areas">
+      <!-- 右上：套牌车告警 -->
+      <div class="data-card fake-vehicle-alerts">
         <div class="card-header">
-          <el-icon><LocationInformation /></el-icon>
-          <span>监控区域</span>
+          <el-icon><Warning /></el-icon>
+          <span>套牌车告警 ({{ fakeVehicleAlerts.length }})</span>
         </div>
         <div class="card-body">
-          <div class="big-number">{{ monitorAreas }}</div>
-          <div class="label">覆盖区域</div>
+          <div class="alert-list" v-if="fakeVehicleAlerts.length > 0">
+            <TransitionGroup name="alert-slide">
+              <div v-for="alert in fakeVehicleAlerts.slice(0, 5)" :key="alert.id" class="alert-item">
+                <div class="alert-header">
+                  <span class="alert-plate">{{ alert.plateNumber }}</span>
+                  <span class="alert-level" :class="alert.alertLevel?.toLowerCase()">{{ alert.alertLevel || 'HIGH' }}</span>
+                </div>
+                <div class="alert-details">
+                  <span class="alert-speed">🚗 {{ alert.actualSpeed?.toFixed(1) }} km/h</span>
+                  <span class="alert-time">{{ formatAlertTime(alert.createTime) }}</span>
+                </div>
+              </div>
+            </TransitionGroup>
+          </div>
+          <div class="no-alerts" v-else>
+            <el-icon><CircleCheck /></el-icon>
+            <span>暂无告警</span>
+          </div>
         </div>
       </div>
 
@@ -121,10 +137,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ArrowLeft, Refresh, TrendCharts, PieChart, List,
-  Odometer, LocationInformation, Histogram, Location
+  Odometer, Warning, Histogram, CircleCheck
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { getTotalFlow, getDistrictStats, getTrend } from '@/api/etc'
+import { getTotalFlow, getDistrictStats, getTrend, getFakeVehicleAlerts } from '@/api/etc'
 import TrafficFlowMap from '@/components/TrafficFlowMap.vue'
 
 const router = useRouter()
@@ -133,7 +149,7 @@ const router = useRouter()
 const currentTime = ref('')
 const refreshCountdown = ref(10)
 const totalFlow = ref('0')
-const monitorAreas = ref('0')
+const fakeVehicleAlerts = ref([])
 const realtimeData = ref([])
 
 // ECharts实例引用
@@ -186,7 +202,6 @@ const fetchDistrictStats = async () => {
     const res = await getDistrictStats()
     if (res.code === 200 && res.data) {
       const data = res.data
-      monitorAreas.value = data.length.toString()
       
       // 渲染饼图和柱状图
       renderDistrictChart(data)
@@ -195,6 +210,31 @@ const fetchDistrictStats = async () => {
   } catch (error) {
     console.error('获取行政区统计失败：', error)
   }
+}
+
+// 获取套牌车告警数据
+const fetchFakeVehicleAlerts = async () => {
+  try {
+    const res = await getFakeVehicleAlerts(24)
+    if (res.code === 200 && res.data) {
+      fakeVehicleAlerts.value = res.data
+    }
+  } catch (error) {
+    console.error('获取套牌车告警失败：', error)
+  }
+}
+
+// 格式化告警时间
+const formatAlertTime = (timeStr) => {
+  if (!timeStr) return ''
+  const time = new Date(timeStr)
+  return time.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
 }
 
 // 渲染行政区饼图
@@ -267,6 +307,13 @@ const renderCityChart = (data) => {
     cityChart = echarts.init(cityChartRef.value)
   }
   
+  // 按流量降序排序
+  const sortedData = [...data].sort((a, b) => {
+    const aVal = a.count || a.value || 0
+    const bVal = b.count || b.value || 0
+    return aVal - bVal  // 升序排列，因为柱状图是从下到上显示，最大值会在最上面
+  })
+  
   const option = {
     backgroundColor: 'transparent',
     tooltip: {
@@ -291,13 +338,13 @@ const renderCityChart = (data) => {
     },
     yAxis: {
       type: 'category',
-      data: data.map(item => (item.districtName || item.name).replace('市', '')),
+      data: sortedData.map(item => (item.districtName || item.name).replace('市', '')),
       axisLine: { lineStyle: { color: 'rgba(255,255,255,0.2)' } },
       axisLabel: { color: '#fff', fontSize: 10 }
     },
     series: [{
       type: 'bar',
-      data: data.map((item, index) => ({
+      data: sortedData.map((item, index) => ({
         value: item.count || item.value,
         itemStyle: {
           color: {
@@ -357,12 +404,15 @@ const renderTrendChart = (data) => {
     trendChart = echarts.init(trendChartRef.value)
   }
   
-  const timeData = data.map(item => {
+  // 反转数据顺序，使时间从左到右递增（早->晚）
+  const sortedData = [...data].reverse()
+  
+  const timeData = sortedData.map(item => {
     const time = new Date(item.passTime)
     return time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   })
   
-  const countData = data.map((_, index) => index + 1)
+  const countData = sortedData.map((_, index) => index + 1)
   
   const option = {
     backgroundColor: 'transparent',
@@ -425,7 +475,8 @@ const refreshAllData = async () => {
   await Promise.all([
     fetchTotalFlow(),
     fetchDistrictStats(),
-    fetchTrend()
+    fetchTrend(),
+    fetchFakeVehicleAlerts()
   ])
   refreshCountdown.value = 10
 }
@@ -703,6 +754,131 @@ onUnmounted(() => {
 .record-slide-leave-to {
   opacity: 0;
   transform: translateX(30px);
+}
+
+/* 套牌车告警样式 */
+.fake-vehicle-alerts .card-header {
+  border-left-color: #f5576c;
+  color: #f5576c;
+}
+
+.alert-list {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.alert-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.alert-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.alert-list::-webkit-scrollbar-thumb {
+  background: rgba(245, 87, 108, 0.5);
+  border-radius: 2px;
+}
+
+.alert-item {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(245, 87, 108, 0.05);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  transition: all 0.3s ease;
+}
+
+.alert-item:hover {
+  background: rgba(245, 87, 108, 0.15);
+  border-left: 2px solid #f5576c;
+}
+
+.alert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.alert-plate {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f5576c;
+  text-shadow: 0 0 10px rgba(245, 87, 108, 0.4);
+}
+
+.alert-level {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.alert-level.high {
+  background: rgba(245, 87, 108, 0.3);
+  color: #f5576c;
+}
+
+.alert-level.medium {
+  background: rgba(250, 112, 154, 0.3);
+  color: #fa709a;
+}
+
+.alert-level.low {
+  background: rgba(254, 225, 64, 0.3);
+  color: #fee140;
+}
+
+.alert-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.alert-speed {
+  color: #00d4ff;
+}
+
+.alert-time {
+  font-family: 'Courier New', monospace;
+}
+
+.no-alerts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.4);
+  gap: 10px;
+}
+
+.no-alerts .el-icon {
+  font-size: 36px;
+  color: #43e97b;
+}
+
+/* 告警滑动动画 */
+.alert-slide-enter-active {
+  transition: all 0.4s ease;
+}
+
+.alert-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.alert-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.alert-slide-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
 }
 
 /* 响应式 */

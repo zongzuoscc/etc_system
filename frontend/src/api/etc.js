@@ -45,3 +45,12 @@ export const pushData = (data) => {
         data
     })
 }
+
+// 获取套牌车告警数据
+export const getFakeVehicleAlerts = (hours = 24) => {
+    return request({
+        url: '/api/fake-vehicle/alerts',
+        method: 'get',
+        params: { hours }
+    })
+}

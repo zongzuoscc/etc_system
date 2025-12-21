@@ -81,7 +81,7 @@ const updateChart = (trafficData) => {
             <div style="padding: 5px;">
               <div style="color: #00d4ff; font-weight: bold; font-size: 14px;">${params.name}</div>
               <div style="margin-top: 5px;">流量: <span style="color: #ffa500; font-weight: bold;">${volume}</span> 辆次</div>
-              <div>占比: <span style="color: #00ff88;">${percent}%</span></div>
+              <div>热度: <span style="color: #00ff88;">${percent}%</span></div>
             </div>
           `
         }

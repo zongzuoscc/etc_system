@@ -27,7 +27,7 @@ public class EtcServiceImpl extends ServiceImpl<EtcMapper, EtcData> implements E
 
     @Override
     public List<EtcData> getRealTimeTrend() {
-        Page<EtcData> page = new Page<>(1, 10);
+        Page<EtcData> page = new Page<>(1, 100);
         QueryWrapper<EtcData> query = new QueryWrapper<>();
         query.orderByDesc("pass_time");
         return this.page(page, query).getRecords();
