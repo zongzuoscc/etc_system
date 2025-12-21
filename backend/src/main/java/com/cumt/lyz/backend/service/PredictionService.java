@@ -18,4 +18,10 @@ public interface PredictionService extends IService<PredictionData> {
      * @param districtName 行政区名称 (如: 鼓楼区)
      */
     List<PredictionData> getDistrictTrend(String districtName);
+
+    /**
+     * 【新增】执行 Python 预测脚本
+     * @return true=执行成功, false=失败
+     */
+    boolean runAnalysisTask();
 }

@@ -55,6 +55,11 @@ public class EtcConsumer {
                 String rawName = json.get("XZQHMC").getAsString().trim();
                 String cleanName = rawName.replace("徐州市", "");
 
+                // 【新增】强制统一行政区划名称 (解决铜山县/区不一致问题)
+                if (cleanName.equals("铜山县")) {
+                    cleanName = "铜山区";
+                }
+
                 // 【智能补全逻辑】
                 // 如果清洗后名字变为空（说明原名叫"徐州市"），或者原名就是"市辖区"
                 // 此时尝试从卡口名称(KKMC)里提取真正的区县名

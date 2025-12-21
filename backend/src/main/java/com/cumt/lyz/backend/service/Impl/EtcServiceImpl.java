@@ -26,16 +26,14 @@ public class EtcServiceImpl extends ServiceImpl<EtcMapper, EtcData> implements E
     }
 
     @Override
-    public List<EtcData> getRealTimeTrend() {
-        Page<EtcData> page = new Page<>(1, 100);
-        QueryWrapper<EtcData> query = new QueryWrapper<>();
-        query.orderByDesc("pass_time");
-        return this.page(page, query).getRecords();
+    public List<Map<String, Object>> getRealTimeTrend() {
+        // 【修改】不再查原始记录，而是调用 Mapper 的聚合统计方法
+        // 返回格式示例: [{"time_str": "10:01", "vehicle_count": 52}, ...]
+        return baseMapper.getRealTimeTrendAggregation();
     }
 
     @Override
     public List<Map<String, Object>> getDistrictStats() {
-        // 调用 Mapper 中手写的 SQL
         return baseMapper.countByDistrict();
     }
 

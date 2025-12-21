@@ -15,9 +15,10 @@ public interface EtcService extends IService<EtcData> {
     Page<EtcData> getHistoryList(int page, int size, String plateNumber);
 
     /**
-     * 获取大屏实时趋势（最新10条）
+     * 【修改】获取大屏实时趋势
+     * 改为返回聚合后的统计数据 (时间点 + 流量值)
      */
-    List<EtcData> getRealTimeTrend();
+    List<Map<String, Object>> getRealTimeTrend();
 
     /**
      * 获取各行政区车流量占比
