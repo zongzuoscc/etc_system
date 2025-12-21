@@ -50,7 +50,36 @@ public class EtcConsumer {
             EtcData data = new EtcData();
 
             // ... (这里保持你之前的普通数据解析逻辑不变) ...
-            if (json.has("XZQHMC")) data.setDistrictName(json.get("XZQHMC").getAsString());
+            // ... 之前的代码 ...
+            if (json.has("XZQHMC")) {
+                String rawName = json.get("XZQHMC").getAsString().trim();
+                String cleanName = rawName.replace("徐州市", "");
+
+                // 【智能补全逻辑】
+                // 如果清洗后名字变为空（说明原名叫"徐州市"），或者原名就是"市辖区"
+                // 此时尝试从卡口名称(KKMC)里提取真正的区县名
+                if ((cleanName.isEmpty() || cleanName.equals("市辖区")) && json.has("KKMC")) {
+                    String kkmc = json.get("KKMC").getAsString();
+
+                    if (kkmc.contains("铜山")) cleanName = "铜山区";
+                    else if (kkmc.contains("鼓楼")) cleanName = "鼓楼区";
+                    else if (kkmc.contains("云龙")) cleanName = "云龙区";
+                    else if (kkmc.contains("贾汪")) cleanName = "贾汪区";
+                    else if (kkmc.contains("泉山")) cleanName = "泉山区";
+                    else if (kkmc.contains("丰县")) cleanName = "丰县";
+                    else if (kkmc.contains("沛县")) cleanName = "沛县";
+                    else if (kkmc.contains("睢宁")) cleanName = "睢宁县";
+                    else if (kkmc.contains("邳州")) cleanName = "邳州市";
+                    else if (kkmc.contains("新沂")) cleanName = "新沂市";
+                    else {
+                        // 如果实在找不到，就兜底给一个默认值，比如铜山区（因为它最大，高速最多）
+                        cleanName = "铜山区";
+                    }
+                }
+
+                // 最终赋值（如果 cleanName 还是空，就保留 rawName 防止存入空串）
+                data.setDistrictName(cleanName.isEmpty() ? "铜山区" : cleanName);
+            }
             if (json.has("KKMC")) data.setBayonetName(json.get("KKMC").getAsString());
             if (json.has("FXLX")) data.setDirectionType(json.get("FXLX").getAsString());
             if (json.has("HPZL")) data.setPlateType(json.get("HPZL").getAsString());
