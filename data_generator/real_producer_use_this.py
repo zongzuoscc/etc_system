@@ -9,9 +9,9 @@ from faker import Faker
 from kafka import KafkaProducer
 
 # --- 配置 ---
-CSV_FOLDER = "202312（交通流量）"  # 文件夹名称（确保和脚本同目录）
+CSV_FOLDER = "202312（交通流量）"
 KAFKA_TOPIC = 'etc_traffic'
-KAFKA_ALERT_TOPIC = 'fake_plate_alert'  # 套牌车预警专用topic
+KAFKA_ALERT_TOPIC = 'fake_plate_alert'
 KAFKA_SERVER = 'localhost:9092'
 
 # 初始化 Faker 和 Kafka Producer
@@ -104,58 +104,91 @@ for f, t, d, tm in pairs:
 ENABLE_COORD_JITTER = True
 JITTER_RANGE = 0.0005
 
+# --- 时间转换相关 ---
+# 记录CSV中的第一条数据时间，用于计算时间偏移
+csv_start_time = None
+program_start_time = datetime.now()
 
-# --- 车牌相关配置 ---
+
+def parse_csv_datetime(date_str):
+    """解析CSV中的日期时间字符串"""
+    if not date_str or not isinstance(date_str, str):
+        return datetime.now()
+
+    date_str = date_str.strip()
+    formats = [
+        '%Y/%m/%d %H:%M',
+        '%Y/%m/%d',
+        '%Y/%m/%d %H:%M:%S',
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    print(f"⚠️  无法解析日期: {date_str}，使用当前时间")
+    return datetime.now()
+
+
+def csv_time_to_current(csv_time):
+    """将CSV历史时间转换为相对当前时间"""
+    global csv_start_time, program_start_time
+
+    if csv_start_time is None:
+        csv_start_time = csv_time
+        return program_start_time
+
+    # 计算CSV时间相对于CSV起始时间的偏移
+    time_offset = csv_time - csv_start_time
+    # 应用到当前时间上
+    return program_start_time + time_offset
+
+
+# --- 车牌相关 ---
 def extract_plate_prefix(plate_str):
-    """从CSV中的车牌字符串提取前缀（去掉***部分）"""
+    """从CSV中的车牌字符串提取前缀"""
     if not plate_str or not isinstance(plate_str, str):
         return None
     plate_str = plate_str.strip()
     if '***' in plate_str:
         prefix = plate_str.replace('***', '').strip()
-        # 确保前缀长度合理（通常是2-5位）
         if 2 <= len(prefix) <= 5:
             return prefix
     return None
 
 
 def complete_plate_suffix():
-    """
-    生成车牌后三位
-    每一位可以是：数字(0-9) 或 大写字母(A-Z)
-    """
-    chars = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ'  # 数字+大写字母，排除I和O
+    """生成车牌后三位"""
+    chars = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ'
     return ''.join(random.choice(chars) for _ in range(3))
 
 
 def generate_plate_from_row(row):
     """从CSV行数据生成完整车牌号"""
-    # 尝试多个可能的列名
-    plate_raw = (row.get("SUBSTR(HPHM,1,4)||'***'", "") or
-                 row.get("HPHM", "") or
-                 row.get("车牌", ""))
-
+    plate_raw = row.get("HP", "") or row.get("HPHM", "") or row.get("车牌", "")
     prefix = extract_plate_prefix(plate_raw)
 
     if prefix:
-        # 使用真实前缀 + 随机后三位
         suffix = complete_plate_suffix()
         return prefix + suffix
     else:
-        # 如果没有提取到前缀，使用faker生成
         return fake.license_plate()
 
 
-# --- 套牌检测相关变量 ---
+# --- 套牌检测相关 ---
 plate_records = {}
 DETECTION_WINDOW_MINUTES = 30
 MIN_SUSPICIOUS_DISTANCE_KM = 30
 TIME_TOLERANCE_FACTOR = 0.5
 
 last_injection_time = datetime.now() - timedelta(minutes=10)
+fake_plate_injection_count = 0
 
 
-# --- 工具函数 ---
 def get_gate_id_by_name(name):
     for i, gate in enumerate(REAL_GATES):
         if gate and gate["name"] == name:
@@ -197,19 +230,18 @@ def check_fake_plate(data, current_time):
     if time_diff_sec < lower_bound:
         speed_kmh = round((dist_m / 1000) / (time_diff_sec / 3600), 1)
 
-        # 构建预警消息
         alert_message = {
             "alert_type": "fake_plate",
-            "alert_time": current_time.isoformat(),
+            "alert_time": current_time.strftime('%Y/%m/%d %H:%M'),
             "plate_number": hphm,
             "previous_record": {
-                "time": prev_time.isoformat(),
+                "time": prev_time.strftime('%Y/%m/%d %H:%M'),
                 "location": prev['kkmc'],
                 "latitude": prev['lat'],
                 "longitude": prev['lon']
             },
             "current_record": {
-                "time": current_time.isoformat(),
+                "time": current_time.strftime('%Y/%m/%d %H:%M'),
                 "location": kkmc,
                 "latitude": lat,
                 "longitude": lon
@@ -221,19 +253,17 @@ def check_fake_plate(data, current_time):
                 "expected_min_time_seconds": expected_time_sec,
                 "expected_min_time_minutes": round(expected_time_sec / 60, 2),
                 "average_speed_kmh": speed_kmh,
-                "alert_level": "HIGH"  # 可以根据速度设置等级
+                "alert_level": "HIGH"
             },
             "reason": "物理不可能的行驶速度，高度疑似套牌"
         }
 
-        # 发送到Kafka预警topic
         try:
             producer.send(KAFKA_ALERT_TOPIC, alert_message)
-            producer.flush()  # 确保立即发送
+            producer.flush()
         except Exception as e:
             print(f"⚠️  预警消息发送Kafka失败: {e}")
 
-        # 控制台打印预警
         print(f"\n{'=' * 80}")
         print(f"🚨【套牌车预警】检测到疑似套牌车！")
         print(f"   车牌: {hphm}")
@@ -247,12 +277,15 @@ def check_fake_plate(data, current_time):
 
 
 def inject_realistic_fake_plate():
-    global last_injection_time
-    if (datetime.now() - last_injection_time).total_seconds() < random.uniform(28, 32):
+    """注入套牌车数据（使用当前时间线）"""
+    global last_injection_time, fake_plate_injection_count
+
+    if (datetime.now() - last_injection_time).total_seconds() < random.uniform(25, 35):
         return
     if len(plate_records) < 20:
         return
 
+    # 随机选择一个已有车牌
     fake_plate = random.choice(list(plate_records.keys()))
     from_id, to_id = random.sample(range(1, 20), 2)
 
@@ -261,7 +294,8 @@ def inject_realistic_fake_plate():
     if dist == 0 or base_time_sec == 0:
         return
 
-    time_sec = int(base_time_sec * random.uniform(0.7, 1.3))
+    # 使用远低于理论最短时间的时间，确保触发预警
+    time_sec = int(base_time_sec * random.uniform(0.3, 0.6))  # 30%-60%的理论时间
     speed_kmh = round((dist / 1000) / (time_sec / 3600), 1)
 
     gate_from = REAL_GATES[from_id]
@@ -273,7 +307,7 @@ def inject_realistic_fake_plate():
         "XZQHMC": "徐州市",
         "KKMC": gate_from["name"],
         "FXLX": random.choice(['1', '2']),
-        "GCSJ": base_time.isoformat(),
+        "GCSJ": base_time.strftime('%Y/%m/%d %H:%M'),
         "HPZL": "02",
         "HPHM": fake_plate,
         "CLPPXH": "未知",
@@ -286,11 +320,9 @@ def inject_realistic_fake_plate():
             6)
     }
     producer.send(KAFKA_TOPIC, rec1)
-    current_dt = datetime.fromisoformat(rec1["GCSJ"])
-    check_fake_plate(rec1, current_dt)
-    plate_records[fake_plate] = {"time": current_dt, "gate_id": from_id, "kkmc": gate_from["name"],
+    check_fake_plate(rec1, base_time)
+    plate_records[fake_plate] = {"time": base_time, "gate_id": from_id, "kkmc": gate_from["name"],
                                  "lat": rec1["WEIDU"], "lon": rec1["JINGDU"]}
-    print(f"🔥 套牌注入 (1/2): {fake_plate} @ {gate_from['name'][:25]}...")
 
     rec2_time = base_time + timedelta(seconds=time_sec)
     rec2 = {
@@ -298,7 +330,7 @@ def inject_realistic_fake_plate():
         "XZQHMC": "徐州市",
         "KKMC": gate_to["name"],
         "FXLX": random.choice(['1', '2']),
-        "GCSJ": rec2_time.isoformat(),
+        "GCSJ": rec2_time.strftime('%Y/%m/%d %H:%M'),
         "HPZL": "02",
         "HPHM": fake_plate,
         "CLPPXH": "未知",
@@ -312,7 +344,12 @@ def inject_realistic_fake_plate():
     check_fake_plate(rec2, rec2_time)
     plate_records[fake_plate] = {"time": rec2_time, "gate_id": to_id, "kkmc": gate_to["name"], "lat": rec2["WEIDU"],
                                  "lon": rec2["JINGDU"]}
-    print(f"🔥 套牌注入 (2/2): {fake_plate} @ {gate_to['name'][:25]}... 距离 {dist // 1000}km，耗时 {time_sec // 60}分\n")
+
+    fake_plate_injection_count += 1
+    print(
+        f"🔥 套牌注入#{fake_plate_injection_count}: {fake_plate} | {gate_from['name'][:25]}... → {gate_to['name'][:25]}...")
+    print(
+        f"   距离 {dist // 1000}km，耗时 {time_sec // 60}分{time_sec % 60}秒（理论需{base_time_sec // 60}分），平均速度 {speed_kmh} km/h\n")
 
     last_injection_time = datetime.now()
 
@@ -342,9 +379,11 @@ def get_flow_multiplier():
 # --- 主程序启动 ---
 csv_files = get_all_csv_files(CSV_FOLDER)
 
-print(f"\n✅ 交通流量生产者启动（含套牌车检测预警+真实车牌）！")
+print(f"\n✅ 交通流量生产者启动（时间转换+强化套牌检测）！")
 print(f"   📤 交通数据Topic: {KAFKA_TOPIC}")
-print(f"   🚨 预警数据Topic: {KAFKA_ALERT_TOPIC}\n")
+print(f"   🚨 预警数据Topic: {KAFKA_ALERT_TOPIC}")
+print(f"   🕐 CSV历史时间 → 当前时间线（保持相对时间差）")
+print(f"   🎯 套牌注入策略：30%-60%理论时间，确保触发预警\n")
 
 file_index = 0
 while True:
@@ -365,37 +404,52 @@ while True:
         file_index = (file_index + 1) % len(csv_files)
         continue
 
+    # 重置时间基准（每个新文件）
+    csv_start_time = None
+
     kkmc_set = {row.get("KKMC", "").strip() for row in rows if row.get("KKMC", "").strip()}
     current_kkmc_list = list(kkmc_set) or None
     random.shuffle(rows)
 
     for row_index, row in enumerate(rows):
-        # 从当前行提取车牌前缀并补全后三位
         plate = generate_plate_from_row(row)
+
+        # 解析CSV时间并转换为当前时间线
+        csv_original_time = parse_csv_datetime(row.get("GCSJ", ""))
+        current_time = csv_time_to_current(csv_original_time)
+
+        # 保留原始CSV格式用于显示
+        csv_gcsj = row.get("GCSJ", "").strip() or current_time.strftime('%Y/%m/%d %H:%M')
 
         data = {
             "GCXH": row.get("GCXH", str(random.randint(10000, 99999))).strip(),
             "XZQHMC": row.get("XZQHMC", "徐州市").strip(),
             "FXLX": row.get("FXLX", random.choice(['1', '2'])).strip(),
-            "GCSJ": datetime.now().isoformat(),
+            "GCSJ": csv_gcsj,  # 保留原始格式
             "HPZL": row.get("HPZL", "02").strip(),
             "CLPPXH": row.get("CLPPXH", "未知").strip(),
             "HPHM": plate,
             "CS": max(20, round(random.gauss(90, 20), 1))
         }
 
-        if current_kkmc_list:
+        # 优先使用19个真实卡口（提高套牌检测成功率）
+        if random.random() < 0.6 and len(REAL_GATES) > 1:  # 60%概率使用真实卡口
+            gate = random.choice([g for g in REAL_GATES if g is not None])
+            data["KKMC"] = gate["name"]
+            base_lat, base_lon = gate["lat"], gate["lon"]
+        elif current_kkmc_list:
             data["KKMC"] = random.choice(current_kkmc_list)
+            gate_id = get_gate_id_by_name(data["KKMC"])
+            if gate_id:
+                gate = REAL_GATES[gate_id]
+                base_lat, base_lon = gate["lat"], gate["lon"]
+            else:
+                base_lat = random.uniform(MIN_LAT, MAX_LAT)
+                base_lon = random.uniform(MIN_LON, MAX_LON)
         else:
             road = random.choice(['G3', 'G30', 'G104', 'S25', 'S32', 'G206'])
             area = random.choice(['徐州', '新沂', '邳州', '睢宁', '沛县', '丰县', '铜山'])
             data["KKMC"] = f"{road}_{area}_卡口{random.randint(1, 999):03d}"
-
-        gate_id = get_gate_id_by_name(data["KKMC"])
-        if gate_id:
-            gate = REAL_GATES[gate_id]
-            base_lat, base_lon = gate["lat"], gate["lon"]
-        else:
             base_lat = random.uniform(MIN_LAT, MAX_LAT)
             base_lon = random.uniform(MIN_LON, MAX_LON)
 
@@ -404,20 +458,21 @@ while True:
         data["JINGDU"] = round(
             base_lon + random.uniform(-JITTER_RANGE, JITTER_RANGE) if ENABLE_COORD_JITTER else base_lon, 6)
 
-        current_dt = datetime.now()
-
         producer.send(KAFKA_TOPIC, data)
-        check_fake_plate(data, current_dt)
+        check_fake_plate(data, current_time)
 
+        # 更新车牌记录（使用转换后的时间）
+        gate_id = get_gate_id_by_name(data["KKMC"])
         if gate_id:
             plate_records[plate] = {
-                "time": current_dt,
+                "time": current_time,
                 "gate_id": gate_id,
                 "kkmc": data["KKMC"],
                 "lat": data["WEIDU"],
                 "lon": data["JINGDU"]
             }
 
+        # 注入套牌车
         inject_realistic_fake_plate()
 
         sleep_interval = 1.0 / (50 * get_flow_multiplier())
@@ -425,8 +480,7 @@ while True:
 
         if row_index % 100 == 0:
             kkmc_show = data["KKMC"][:40] + ("..." if len(data["KKMC"]) > 40 else "")
-            print(
-                f"   [{filename}] {row_index:5d}/{len(rows)} │ 速率 {50 * get_flow_multiplier():.1f} msg/s │ {plate} @ {kkmc_show}")
+            print(f"   [{filename}] {row_index:5d}/{len(rows)} │ {plate} @ {kkmc_show} │ CSV时间: {csv_gcsj}")
 
-    print(f"✅ {filename} 发送完成，切换下一文件\n")
+    print(f"✅ {filename} 发送完成，切换下一文件 | 已注入套牌车: {fake_plate_injection_count} 次\n")
     file_index = (file_index + 1) % len(csv_files)
