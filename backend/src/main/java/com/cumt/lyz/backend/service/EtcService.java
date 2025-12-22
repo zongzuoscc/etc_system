@@ -18,7 +18,7 @@ public interface EtcService extends IService<EtcData> {
      * 【修改】获取大屏实时趋势
      * 改为返回聚合后的统计数据 (时间点 + 流量值)
      */
-    List<Map<String, Object>> getRealTimeTrend();
+    List<Map<String, Object>> getRealTimeTrend(String type);
 
     /**
      * 获取各行政区车流量占比
@@ -29,4 +29,10 @@ public interface EtcService extends IService<EtcData> {
      * 获取某车辆的最后一条记录（用于套牌车检测比对）
      */
     EtcData getLastRecord(String plateNumber);
+
+    /**
+     * 【新增】获取多曲线趋势数据
+     * @return 包含 xData(时间轴), blue(蓝牌数据), yellow(黄牌数据), green(绿牌数据)
+     */
+    Map<String, Object> getTrendByCategory();
 }
