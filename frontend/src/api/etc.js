@@ -37,6 +37,14 @@ export const getTrend = () => {
     })
 }
 
+// 获取按车牌类型分类的趋势数据
+export const getTrendByCategory = () => {
+    return request({
+        url: '/etc/stats/trend/category',
+        method: 'get'
+    })
+}
+
 // 推送数据（扩展功能，可选）
 export const pushData = (data) => {
     return request({
@@ -52,5 +60,33 @@ export const getFakeVehicleAlerts = (hours = 24) => {
         url: '/api/fake-vehicle/alerts',
         method: 'get',
         params: { hours }
+    })
+}
+
+// ========== 离线预测分析API ==========
+
+// 运行预测任务（触发Python脚本执行）
+export const runPrediction = () => {
+    return request({
+        url: '/api/prediction/run',
+        method: 'post',
+        timeout: 120000 // 预测任务可能耗时较长，设置2分钟超时
+    })
+}
+
+// 获取全市预测趋势数据
+export const getCityPredictionTrend = () => {
+    return request({
+        url: '/api/prediction/city-trend',
+        method: 'get'
+    })
+}
+
+// 获取区域预测趋势数据
+export const getDistrictPredictionTrend = (districtName) => {
+    return request({
+        url: '/api/prediction/district-trend',
+        method: 'get',
+        params: districtName ? { districtName } : {}
     })
 }

@@ -32,6 +32,7 @@ public interface EtcService extends IService<EtcData> {
 
     /**
      * 【新增】获取多曲线趋势数据
+     * 
      * @return 包含 xData(时间轴), blue(蓝牌数据), yellow(黄牌数据), green(绿牌数据)
      */
     Map<String, Object> getTrendByCategory();

@@ -1,105 +1,117 @@
-# 一个史诗级巨作
+# ETC 智能监控与决策平台 (Deployment Guide)
 
+基于 Spring Boot + Vue 3 + MyCat + Kafka 的大数据交通监控系统。
 
+## 📅 项目组成员
 
-需要先在docker中安装两个MySQL节点,一定要用5.4的，我已经给出了镜像文件，直接运行即可，kafka，zookeeper，kafka-ui这些镜像  
-
-
-
-***java的版本一定是jdk8***
-
-
-
-然后在本地运行mycat（由于mycat的docker镜像不是很稳定所以只好在本地运行了）
-
-
-
-接着在前端部分启动项目 npm run dev（在命令行中启动，如cmd）
-
-
-
-在后端部分使用Intellij IDEA一键启动（或者打包成jar包之后启动，由于暂时不需要部署，所以暂不打包）
-
-
-
-在数据生成部分，使用pycharm，运行use-this.py代码，
-
-
-
-docker中确保容器全部启动。创建容器的配置文件也增加了进来
-
-
-
-后端代码如果有更改需求千万别乱改，一定让我本人亲自来改
-
-
-
-
+- **杨一鸣**: 后端开发与数据库设计
+- **赵博涵**: 前端开发与测试
+- **李端宸**: 数据生成模拟与分析
 
 ---
 
-## 详细版教程
+## 🛠️ 1. 环境准备 (Prerequisites)
 
-如何运行该项目，首先在前端所在的文件夹打开cmd命令框，输入npm run dev
+请确保本地已安装以下环境：
 
-在docker中将需要的容器全部启动，同时启动mycat服务，mycat的启动方法同样是通过命令行，在mycat的bin目录下打开cmd输入mycat console即可启动。（记得一定要先把conf目录下的三个配置文件进行替换）
+- **JDK 8** (推荐 1.8.0_xxx)
+- **Node.js 16+** & NPM
+- **Docker Desktop** (用于运行 MySQL, Kafka, Zookeeper)
+- **Python 3.8+** (用于数据生成与预测脚本)
+- **MyCat** (中间件，需单独下载解压)
 
-使用Intellij IDEA打开backend文件夹，之后打开mycat，mysql的两个节点，确保建好了库和表
+---
 
-至于如何建表，可以使用Intellij IDEA自带的数据库连接功能连接到mycat，两个mysql，由于Intellij IDEA内置的datagrip对mycat识别不佳，所以可以直接在两个mysql中创建库和表
+## 🚀 2. 启动 Docker 环境
 
-具体如下
+Docker 负责运行基础组件：MySQL (db1, db2), Kafka, Zookeeper, Redis。
 
-![bd4dde6a-3931-4043-a221-ee5923b8e89e](file:///C:/Users/26515/Pictures/Typedown/bd4dde6a-3931-4043-a221-ee5923b8e89e.png)
+1. 打开项目根目录。
+2. 运行 Docker Compose:
+   
+   ```bash
+   docker-compose up -d
+   ```
+3. 等待所有容器启动完成 (Status: Running)。
+   - **Kafka UI**: `http://localhost:8081`
 
-mysql节点1创建数据库db1，节点2建里db2，然后相应的建表语句如下
+---
 
-```sql
-create table etc_data
-(
-    id             bigint         not null comment '主键ID'
-        primary key,
-    plate_number   varchar(20)    null comment '车牌号码',
-    plate_type     varchar(20)    null comment '号牌种类',
-    pass_time      datetime       null comment '过车时间',
-    bayonet_name   varchar(100)   null comment '卡口名称',
-    district_name  varchar(64)    null comment '行政区划',
-    direction_type varchar(20)    null comment '方向类型',
-    vehicle_model  varchar(64)    null comment '车辆品牌',
-    longitude      decimal(10, 6) null comment '经度',
-    latitude       decimal(10, 6) null comment '纬度',
-    flow_direction int default 0  null comment '流向:0-省内,1-入徐,2-出徐'
-)
-    comment 'ETC通行记录表' collate = utf8mb4_general_ci;
-```
+## 💾 3. 数据库初始化 (Database Init)
 
+系统使用 MyCat 分库分表，底层由两个 MySQL 节点 (`db1:3306`, `db2:3307`) 支撑。
 
+1. 使用Datagrip连接到 **MySQL-DB1** (`localhost:3306`, User: `root`, Pass: `root`, DB: `db1`)。
+2. 运行根目录下的 SQL 脚本: `init_db.sql`。
+3. 连接到 **MySQL-DB2** (`localhost:3307`, User: `root`, Pass: `root`, DB: `db2`)。
+4. 再次运行同样的 `init_db.sql` 或仅创建相同的表结构。
 
-```sql
--- auto-generated definition
-create table fake_vehicle_alert
-(
-    id            bigint auto_increment comment '主键'
-        primary key,
-    plate_number  varchar(20)                           null comment '车牌号',
-    start_bayonet varchar(100)                          null comment '起点卡口',
-    end_bayonet   varchar(100)                          null comment '终点卡口',
-    start_time    datetime                              null comment '起点时间',
-    end_time      datetime                              null comment '终点时间(报警时间)',
-    distance      decimal(10, 2)                        null comment '距离(km)',
-    time_diff     bigint                                null comment '耗时(秒)',
-    actual_speed  decimal(10, 2)                        null comment '实际车速(km/h)',
-    limit_speed   decimal(10, 2)                        null comment '限速阈值',
-    alert_level   varchar(20) default 'HIGH'            null comment '报警等级',
-    create_time   datetime    default CURRENT_TIMESTAMP null
-)
-    comment 'Spark计算的套牌车报警表' collate = utf8mb4_general_ci;
+> **注意**: `traffic_prediction` 和 `fake_vehicle_alert` 表建议在两个库都创建，以支持 MyCat 全局表或分片配置。
 
+---
 
-```
+## 🦁 4. 启动 MyCat (中间件)
 
-建好表之后，启动后端
+MyCat 负责聚合 db1 和 db2。
 
+1. 进入 `mycat/bin` 目录。
+2. **Windows**: 双击运行 `startup_nowrap.bat` (带控制台输出，方便调试)。
+3. **Linux/Mac**: 运行 `./mycat start`。
+4. MyCat 默认端口: **8066** (业务端口), **9066** (管理端口)。
 
+---
 
-然后启动数据生成的代码，接下来应该就可以在前端看到对应的内容了
+## ☕ 5. 启动后端 (Backend)
+
+Spring Boot 核心服务。
+
+1. 进入 `backend` 目录。
+2. 使用 IDEA 打开项目，或命令行运行:
+   
+   ```bash
+   mvn spring-boot:run
+   ```
+3. 服务端口默认: **8080**。
+
+---
+
+## 🖥️ 6. 启动前端 (Frontend)
+
+Vue 3 可视化大屏。
+
+1. 进入 `frontend` 目录。
+2. 安装依赖 (首次运行):
+   
+   ```bash
+   npm install
+   ```
+3. 启动开发服务器:
+   
+   ```bash
+   npm run dev
+   ```
+4. 浏览器访问: [http://localhost:3000](http://localhost:3000)
+
+---
+
+## 📊 7. 启动数据生成器 (Data Generator)
+
+模拟实时 ETC 门架数据流并写入 Kafka。
+
+1. 进入 `data_generator` 目录。
+2. 修改 `real_producer_use_this.py` (如有需要调整 Kafka 地址)。
+3. 运行生成器:
+   
+   ```bash
+   python real_producer_use_this.py
+   ```
+   
+   *控制台将显示 "Sent: ..." 日志，表示数据正在推送。*
+
+---
+
+## 🔍 验证系统功能
+
+1. 打开 **[http://localhost:3000/dashboard](http://localhost:3000/dashboard)** 观察实时大屏数据跳动。
+2. 使用 **交互式查询** 功能检索车牌记录。
+3. 进入 **离线分析** 页面查看流量预测图表。

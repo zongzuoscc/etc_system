@@ -44,9 +44,9 @@ public class EtcServiceImpl extends ServiceImpl<EtcMapper, EtcData> implements E
         List<String> xData = new ArrayList<>(timeSet);
 
         // 3. 初始化三个数据列表 (全部填0)
-        List<Long> blueData = new ArrayList<>();   // 02
+        List<Long> blueData = new ArrayList<>(); // 02
         List<Long> yellowData = new ArrayList<>(); // 01
-        List<Long> greenData = new ArrayList<>();  // 52
+        List<Long> greenData = new ArrayList<>(); // 52
 
         // 4. 构建快速查找表 (Time + Type -> Count)
         Map<String, Long> lookup = new HashMap<>();

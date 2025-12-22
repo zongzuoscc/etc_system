@@ -24,8 +24,8 @@ public class EtcController {
     @ApiOperation("分页查询历史数据")
     @GetMapping("/list")
     public Result<Page<EtcData>> list(@RequestParam(defaultValue = "1") int page,
-                                      @RequestParam(defaultValue = "10") int size,
-                                      @RequestParam(required = false) String plateNumber) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String plateNumber) {
         Page<EtcData> result = etcService.getHistoryList(page, size, plateNumber);
         return Result.success(result);
     }

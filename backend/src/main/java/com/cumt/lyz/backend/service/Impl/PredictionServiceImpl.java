@@ -38,23 +38,25 @@ public class PredictionServiceImpl extends ServiceImpl<PredictionMapper, Predict
         try {
             System.out.println("🐍 [Java] 正在唤醒 Python 进行预测计算...");
 
-            // ⚠️⚠️⚠️ 请根据你的实际环境修改路径 ⚠️⚠️⚠️
-            // 1. Python 解释器路径 (根据你之前的报错日志填写的)
-            String pythonExe = "D:\\Python\\Python311\\python.exe";
+            // 1. 使用系统环境变量中的 Python 解释器
+            String pythonExe = "python";
 
-            // 2. Python 脚本路径 (Analyze.py)
-            String scriptPath = "C:\\Users\\26515\\Desktop\\trafficSystem\\etc_system\\data_generator\\Analyze.py";
+            // 2. 使用相对路径指向项目中的脚本
+            String scriptPath = "data_generator/Analyze.py";
 
             // 构建命令: python.exe Analyze.py
             ProcessBuilder pb = new ProcessBuilder(pythonExe, scriptPath);
             pb.redirectErrorStream(true); // 合并错误输出，方便调试
 
+            // 设置环境变量，强制 Python 使用 UTF-8 编码输出（支持 emoji 等字符）
+            pb.environment().put("PYTHONIOENCODING", "utf-8");
+
             // 启动进程
             Process process = pb.start();
 
             // 读取 Python 的控制台输出 (实时打印，防止假死)
-            // 注意：Windows下 Python 输出通常是 GBK 编码
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), "GBK"));
+            // 使用 UTF-8 编码以支持 emoji 等特殊字符
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), "UTF-8"));
             String line;
             while ((line = reader.readLine()) != null) {
                 System.out.println("🐍 [Python]: " + line);

@@ -1,5 +1,6 @@
 <template>
   <div class="dashboard-container">
+    <canvas id="particleCanvas" class="particle-bg"></canvas>
     <!-- 顶部标题栏 -->
     <header class="dashboard-header">
       <div class="header-left">
@@ -12,6 +13,8 @@
         <div class="current-time">{{ currentTime }}</div>
       </div>
     </header>
+
+
 
     <!-- 主展示区域 -->
     <div class="dashboard-grid" ref="gridRef">
@@ -119,6 +122,130 @@ import TrendLineChart from '@/components/TrendLineChart.vue'
 import LatestRecords from '@/components/LatestRecords.vue'
 import TrafficFlowMap from '@/components/TrafficFlowMap.vue'
 
+// 粒子动画逻辑
+let particleAnim = null
+
+class ParticleAnimation {
+  constructor(canvas) {
+    this.canvas = canvas
+    this.ctx = canvas.getContext('2d')
+    this.particles = []
+    this.mouse = { x: null, y: null, radius: 100 }
+    
+    this.resize()
+    this.init()
+    
+    window.addEventListener('resize', () => this.resize())
+    window.addEventListener('mousemove', (e) => {
+      this.mouse.x = e.clientX
+      this.mouse.y = e.clientY
+    })
+    window.addEventListener('mouseleave', () => {
+        this.mouse.x = null
+        this.mouse.y = null
+    })
+  }
+
+  resize() {
+    this.canvas.width = window.innerWidth
+    this.canvas.height = window.innerHeight
+    this.init()
+  }
+
+  init() {
+    this.particles = []
+    const particleCount = Math.min((window.innerWidth * window.innerHeight) / 15000, 80)
+    for (let i = 0; i < particleCount; i++) {
+        let size = (Math.random() * 2) + 0.5
+        let x = Math.random() * this.canvas.width
+        let y = Math.random() * this.canvas.height
+        let directionX = (Math.random() * 0.5) - 0.25
+        let directionY = (Math.random() * 0.5) - 0.25
+        
+        this.particles.push({
+            x, y, directionX, directionY, size
+        })
+    }
+  }
+
+  draw() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+    
+    for (let i = 0; i < this.particles.length; i++) {
+        let p = this.particles[i]
+        
+        p.x += p.directionX
+        p.y += p.directionY
+        
+        if (p.x > this.canvas.width || p.x < 0) p.directionX = -p.directionX
+        if (p.y > this.canvas.height || p.y < 0) p.directionY = -p.directionY
+        
+        if (this.mouse.x != null) {
+            let dx = this.mouse.x - p.x
+            let dy = this.mouse.y - p.y
+            let distance = Math.sqrt(dx*dx + dy*dy)
+            
+            if (distance < this.mouse.radius) {
+                const forceDirectionX = dx / distance
+                const forceDirectionY = dy / distance
+                const force = (this.mouse.radius - distance) / this.mouse.radius
+                const directionX = forceDirectionX * force * 3
+                const directionY = forceDirectionY * force * 3
+                p.x -= directionX
+                p.y -= directionY
+            }
+        }
+        
+        this.ctx.beginPath()
+        this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
+        this.ctx.fillStyle = '#667eea'
+        this.ctx.fill()
+
+        this.connect(p, this.particles.slice(i + 1))
+        
+        if (this.mouse.x != null) {
+             this.connectMouse(p)
+        }
+    }
+  }
+
+  connect(p1, others) {
+      for (let p2 of others) {
+          let distance = ((p1.x - p2.x) * (p1.x - p2.x)) + ((p1.y - p2.y) * (p1.y - p2.y))
+          if (distance < (this.canvas.width/9) * (this.canvas.height/9)) {
+              let opacityValue = 1 - (distance / 20000)
+              if (opacityValue > 0) {
+                  this.ctx.strokeStyle = `rgba(102, 126, 234, ${opacityValue * 0.15})`
+                  this.ctx.lineWidth = 1
+                  this.ctx.beginPath()
+                  this.ctx.moveTo(p1.x, p1.y)
+                  this.ctx.lineTo(p2.x, p2.y)
+                  this.ctx.stroke()
+              }
+          }
+      }
+  }
+  
+  connectMouse(p) {
+      let dx = this.mouse.x - p.x
+      let dy = this.mouse.y - p.y
+      let distance = dx*dx + dy*dy
+      if (distance < 20000) {
+          this.ctx.strokeStyle = `rgba(100, 255, 218, 0.2)`
+          this.ctx.lineWidth = 1
+          this.ctx.beginPath()
+          this.ctx.moveTo(this.mouse.x, this.mouse.y)
+          this.ctx.lineTo(p.x, p.y)
+          this.ctx.stroke()
+      }
+  }
+
+  animate() {
+    this.draw()
+    requestAnimationFrame(() => this.animate())
+  }
+}
+
 const router = useRouter()
 const gridRef = ref(null)
 const fromPanelRef = ref(null)
@@ -199,7 +326,7 @@ const getPanelProps = (panelId) => {
     district: { data: districtData.value },
     city: { data: districtData.value },
     alerts: { alerts: fakeVehicleAlerts.value },
-    trend: { data: trendData.value },
+    trend: { data: trendData.value, showCategorySelector: true },
     records: { records: realtimeData.value },
     map: {}
   }
@@ -503,6 +630,13 @@ onMounted(async () => {
   
   await refreshAllData()
   startCountdown()
+  
+  // 初始化粒子
+  const canvas = document.getElementById('particleCanvas')
+  if (canvas) {
+    particleAnim = new ParticleAnimation(canvas)
+    particleAnim.animate()
+  }
 })
 
 onUnmounted(() => {
@@ -513,7 +647,7 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard-container {
-  background: linear-gradient(135deg, #0a0e27 0%, #1a1e3e 50%, #0a0e27 100%);
+  background-color: #0b0d17;
   height: 100vh;
   width: 100vw;
   color: #fff;
@@ -522,6 +656,18 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
+  position: relative;
+}
+
+/* 粒子背景 - FIXED positioning */
+.particle-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .dashboard-header {
@@ -597,7 +743,8 @@ onUnmounted(() => {
 .panel-card {
   height: 100%;
   width: 100%;
-  background: rgba(10, 14, 39, 0.9);
+  background: rgba(11, 13, 23, 0.85); /* 半透明深色背景，让粒子透出 */
+  backdrop-filter: blur(8px);
   border: 1px solid rgba(102, 126, 234, 0.4);
   border-radius: 10px;
   overflow: hidden;
