@@ -27,12 +27,15 @@
 Docker 负责运行基础组件：MySQL (db1, db2), Kafka, Zookeeper, Redis。
 
 1. 打开项目根目录。
+
 2. 运行 Docker Compose:
    
    ```bash
    docker-compose up -d
    ```
+
 3. 等待所有容器启动完成 (Status: Running)。
+   
    - **Kafka UI**: `http://localhost:8081`
 
 ---
@@ -55,7 +58,7 @@ Docker 负责运行基础组件：MySQL (db1, db2), Kafka, Zookeeper, Redis。
 MyCat 负责聚合 db1 和 db2。
 
 1. 进入 `mycat/bin` 目录。
-2. **Windows**: 双击运行 `startup_nowrap.bat` (带控制台输出，方便调试)。
+2. **Windows**: 打开cmd输入mycat console，无报错即成功启动
 3. **Linux/Mac**: 运行 `./mycat start`。
 4. MyCat 默认端口: **8066** (业务端口), **9066** (管理端口)。
 
@@ -66,11 +69,9 @@ MyCat 负责聚合 db1 和 db2。
 Spring Boot 核心服务。
 
 1. 进入 `backend` 目录。
-2. 使用 IDEA 打开项目，或命令行运行:
-   
-   ```bash
-   mvn spring-boot:run
-   ```
+
+2. 使用 IDEA 打开项目，运行BackendApplication.java文件
+
 3. 服务端口默认: **8080**。
 
 ---
@@ -80,16 +81,19 @@ Spring Boot 核心服务。
 Vue 3 可视化大屏。
 
 1. 进入 `frontend` 目录。
+
 2. 安装依赖 (首次运行):
    
    ```bash
    npm install
    ```
+
 3. 启动开发服务器:
    
    ```bash
    npm run dev
    ```
+
 4. 浏览器访问: [http://localhost:3000](http://localhost:3000)
 
 ---
@@ -99,14 +103,14 @@ Vue 3 可视化大屏。
 模拟实时 ETC 门架数据流并写入 Kafka。
 
 1. 进入 `data_generator` 目录。
-2. 修改 `real_producer_use_this.py` (如有需要调整 Kafka 地址)。
-3. 运行生成器:
+
+2. 运行生成器:
    
    ```bash
    python real_producer_use_this.py
    ```
    
-   *控制台将显示 "Sent: ..." 日志，表示数据正在推送。*
+   *控制台将显示 具体信息，表示数据正在推送。*
 
 ---
 
